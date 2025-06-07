@@ -14,10 +14,10 @@ node_names = {
 
 class Model:
     # construct a model/network (phenotype) from the genome
-    def __init__(self, genome:Genome):
+    def __init__(self, genome:Genome, previous_network_fitness:int=0):
         self.genome = genome
         self.phenotype = Model.topological_sort(self.genome.nodes, self.genome.connections)
-        self.fitness = 0
+        self.fitness = previous_network_fitness
         
     # construct the model/network 
     # max possible starting connections should be low
@@ -59,7 +59,7 @@ class Model:
                 connection = Connection(in_node, out_node, weight=rng.random(), innovation_number=innov)
                 connections.append(connection)
         
-        genome = Genome(nodes=input_neurons + output_neurons, connections=connections, input_nodes_count=input_size, output_nodes_count=output_size, innovation_db=innovation_db, rng=rng)
+        genome = Genome(nodes=input_neurons + output_neurons, connections=connections, input_nodes_count=input_size, output_nodes_count=output_size, innovation_db=innovation_db, rng=rng, common_rates=common_rates)
         return Model(genome=genome)
     
     def feed_forward(self, input:dict):

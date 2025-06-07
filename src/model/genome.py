@@ -2,6 +2,7 @@ from model.model_constants import (INPUT_NODE, OUTPUT_NODE, HIDDEN_NODE)
 from model.activation_functions import *
 from model.common_genome_data import *
 import numpy as np
+import copy
 
 class Gene:
     def __init__(self):
@@ -62,13 +63,14 @@ class InnovationDatabase:
 
 class Genome:
     # inputs -> outputs -> new_nodes
-    def __init__(self, nodes:list, connections:list, input_nodes_count:int, output_nodes_count:int, innovation_db:InnovationDatabase, rng:np.random):
+    def __init__(self, nodes:list, connections:list, input_nodes_count:int, output_nodes_count:int, innovation_db:InnovationDatabase, rng:np.random, common_rates:CommonRates):
         self.nodes = nodes
         self.connections = connections
         self.input_nodes_count = input_nodes_count
         self.output_nodes_count = output_nodes_count
         self.innovation_db = innovation_db
         self.rng = rng
+        self.common_rates = common_rates
         
         self.node_map = {node.id: node for node in self.nodes}
         for node in self.nodes:
@@ -79,7 +81,59 @@ class Genome:
                 end_node = self.node_map.get(connection.out_node.id)
                 if end_node:
                     end_node.inputs.append(connection)
-           
+
+    def copy(self):
+        return copy.deepcopy(self)
+
+    def crossover(self, other:'Genome', fitness_self:float, fitness_other:float) -> 'Genome':
+        if fitness_self > fitness_other:
+            parent1, parent2 = self, other
+        else:
+            parent1, parent2 = other, self
+
+        child_nodes = {n.id: NodeGene(n.id, n.type, n.activation_function) for n in parent1.nodes}
+        child_connections = []
+
+        conn_dict1 = {conn.innovation_number: conn for conn in parent1.connections}
+        conn_dict2 = {conn.innovation_number: conn for conn in parent2.connections}
+
+        all_innovations = set(conn_dict1.keys()).union(conn_dict2.keys())
+
+        for innovation in sorted(all_innovations):
+            gene1 = conn_dict1.get(innovation)
+            gene2 = conn_dict2.get(innovation)
+
+            if gene1 and gene2:  # matching gene
+                chosen = self.rng.choice([gene1, gene2])
+            elif gene1:  # disjoint or excess
+                chosen = gene1
+            else:
+                continue  # ignore disjoint/excess from less fit parent
+
+            # Create new connection gene with copied nodes
+            in_node = child_nodes[chosen.in_node.id]
+            out_node = child_nodes[chosen.out_node.id]
+            new_conn = ConnectionGene(in_node, out_node, chosen.weight, chosen.innovation_number)
+            
+            if gene1 and gene2:
+                new_conn.is_disabled = (gene1.is_disabled or gene2.is_disabled) and self.rng.random() < 0.75
+            else:
+                new_conn.is_disabled = chosen.is_disabled
+
+            child_connections.append(new_conn)
+
+        # New genome
+        child = Genome(
+            nodes=list(child_nodes.values()),
+            connections=child_connections,
+            input_nodes_count=self.input_nodes_count,
+            output_nodes_count=self.output_nodes_count,
+            innovation_db=self.innovation_db,
+            rng=self.rng,
+            common_rates=self.common_rates
+        )
+        return child
+
     # taken from the NEAT paper
     # In adding a new node, 
     # the connection gene being split is disabled, and two new connection genes are added to the
